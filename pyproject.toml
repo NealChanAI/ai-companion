@@ -1,0 +1,54 @@
+[project]
+name = "ai-companion"
+version = "0.1.0"
+description = "A Python AI companion for emotional support and conversation"
+authors = [
+  { name = "AI Companion Contributors" }
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "anthropic>=0.39.0",
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.0",
+    "click>=8.0.0",
+    "croniter>=2.0.0",
+    "httpx>=0.27.0",
+    "aiohttp>=3.9.0",
+    "python-frontmatter>=1.0.0",
+    "larksuite-oapi>=1.0.0",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+ai-companion = "ai_companion.cli:main"
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

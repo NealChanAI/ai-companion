@@ -1,0 +1,12 @@
+anthropic>=0.39.0
+openai>=1.0.0
+python-dotenv>=1.0.0
+pydantic>=2.10.0
+pydantic-settings>=2.0
+click>=8.0.0
+croniter>=2.0.0
+httpx>=0.27.0
+aiohttp>=3.9.0
+python-frontmatter>=1.0.0
+larksuite-oapi>=1.0.0
+websockets>=12.0
