@@ -10,3 +10,4 @@ aiohttp>=3.9.0
 python-frontmatter>=1.0.0
 larksuite-oapi>=1.0.0
 websockets>=12.0
+lark_oapi=1.5.3
