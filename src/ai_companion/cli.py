@@ -25,6 +25,8 @@ from ai_companion.channels.feishu import FeishuChannel
 from ai_companion.gateway.binding import BindingTable
 from ai_companion.gateway.router import GatewayRouter
 from ai_companion.skills.manager import SkillManager
+from ai_companion.services.scheduler_service import SchedulerService
+from ai_companion.concurrency.lanes import NamedLaneManager
 from ai_companion.types.message import Message, InboundMessage, OutboundMessage
 from ai_companion.types.session import Session
 from ai_companion.types.tool import ToolCall, ToolResult
@@ -32,6 +34,9 @@ from ai_companion.skills.builtin.memory import MemorySkill
 from ai_companion.skills.builtin.weather import WeatherSkill
 
 logger = get_logger(__name__)
+
+# Global variable to track the latest active chat ID for heartbeat messages
+latest_active_chat_id: Optional[str] = None
 
 
 def create_provider(config: AppConfig) -> BaseProvider:
@@ -54,6 +59,12 @@ async def handle_message(
     weather_skill: WeatherSkill
 ) -> None:
     """Handle a single incoming message through the agent loop."""
+    # Update latest active chat ID for feishu channel
+    global latest_active_chat_id
+    if inbound.channel_id == "feishu":
+        latest_active_chat_id = inbound.peer_id
+        logger.info(f"Updated latest active chat_id to: {latest_active_chat_id}")
+
     # Add user message to session
     user_message = Message(
         role="user",
@@ -281,17 +292,72 @@ def serve():
             await channel.stop()
 
     async def run_all():
+        # Initialize scheduler service
+        scheduler_service = SchedulerService(config.workspace_dir)
+        await scheduler_service.start()
+
+        # Function to monitor scheduler outputs and send to feishu
+        async def monitor_scheduler_outputs():
+            """Monitor scheduler outputs and send them to feishu channel."""
+            global latest_active_chat_id
+
+            feishu_channel = None
+            for ch in channels:
+                if isinstance(ch, FeishuChannel):
+                    feishu_channel = ch
+                    break
+
+            if not feishu_channel:
+                logger.warning("No feishu channel found, skipping scheduler output monitoring")
+                return
+
+            logger.info("Starting scheduler output monitoring")
+
+            while True:
+                try:
+                    # Get outputs from scheduler service
+                    outputs = await scheduler_service.get_outputs()
+
+                    for output in outputs:
+                        # Use the latest active chat ID as target
+                        target_peer = latest_active_chat_id
+                        if target_peer:
+                            outbound = OutboundMessage(
+                                target_channel="feishu",
+                                target_peer=target_peer,
+                                content=output.content
+                            )
+                            await feishu_channel.send(outbound)
+                            logger.info(f"Sent scheduler output to active chat: {target_peer}")
+                        else:
+                            logger.warning("No active chat available, scheduler output not sent")
+
+                    await asyncio.sleep(1)  # Check every second
+
+                except asyncio.CancelledError:
+                    logger.info("Scheduler output monitoring cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"Error monitoring scheduler outputs: {e}")
+                    await asyncio.sleep(1)
+
         # Start all channels as separate tasks
         tasks = [
             asyncio.create_task(process_channel(ch, config))
             for ch in channels
         ]
 
+        # Add scheduler output monitoring task
+        tasks.append(asyncio.create_task(monitor_scheduler_outputs()))
+
         # Wait indefinitely
         try:
             await asyncio.gather(*tasks)
         except KeyboardInterrupt:
             logger.info("Received interrupt, shutting down...")
+            # Stop scheduler service
+            await scheduler_service.stop()
+            # Cancel all tasks
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)

@@ -148,6 +148,9 @@ class FeishuChannel(Channel):
         self._ws_client: Optional[lark.ws.Client] = None
         # Capture the main event loop reference on init
         self._main_loop = asyncio.get_event_loop()
+        # Deduplication: track processed message IDs to avoid duplicates
+        self._processed_message_ids: set[str] = set()
+        self._message_lock = threading.Lock()
 
     @property
     def channel_id(self) -> str:
@@ -156,6 +159,7 @@ class FeishuChannel(Channel):
     def _handle_message(self, data: P2ImMessageReceiveV1) -> None:
         """Handle incoming message receive event from official SDK."""
         try:
+            logger.info(f"[FEISHU RECV] Raw event received")  # Debug: mark when we get any event
             message = data.event.message
             if message.message_type != "text":
                 logger.debug(f"Ignoring non-text message type: {message.message_type}")
@@ -164,11 +168,22 @@ class FeishuChannel(Channel):
             content = json.loads(message.content)
             text = content.get("text", "").strip()
             if not text:
+                logger.info(f"[FEISHU RECV] Empty text message, skipping")
                 return
 
             chat_id = message.chat_id
             message_id = message.message_id
             sender_id = data.event.sender.sender_id
+
+            logger.info(f"[FEISHU RECV] message_id={message_id}, sender_id={sender_id}, text={repr(text[:50])}")
+
+            # Check for duplicates using message_id
+            with self._message_lock:
+                if message_id in self._processed_message_ids:
+                    logger.info(f"[FEISHU DEDUP] Skipping duplicate message: {message_id}")
+                    return
+                # Mark as processed
+                self._processed_message_ids.add(message_id)
 
             inbound = InboundMessage(
                 channel_id="feishu",
@@ -186,7 +201,7 @@ class FeishuChannel(Channel):
             # is executed in a background thread managed by lark-sdk
             # Use the captured main loop from __init__ which runs the receive loop
             self._main_loop.call_soon_threadsafe(lambda: self._queue.put_nowait(inbound))
-            logger.info(f"Queued Feishu message from {chat_id}: {text[:50]}...")
+            logger.info(f"[FEISHU QUEUE] Message queued for processing")
 
         except Exception as e:
             logger.error(f"Error processing Feishu message: {e}")

@@ -5,8 +5,10 @@ Adapted from openclaw's config schema pattern.
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 from pathlib import Path
+from .heartbeat import HeartbeatConfig
+from .cron import CronConfig
 
 
 class AppConfig(BaseSettings):
@@ -50,6 +52,22 @@ class AppConfig(BaseSettings):
     # Logging config
     log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
     log_file: Optional[Path] = Field(None, validation_alias="LOG_FILE")
+
+    # Heartbeat and cron configs
+    # Use Field with validation_alias but without default_factory
+    # to allow environment variable overrides
+    heartbeat: HeartbeatConfig = Field(default=HeartbeatConfig())
+    cron: CronConfig = Field(default=CronConfig())
+
+    # Paths for heartbeat and cron
+    heartbeat_file: Path = Field(
+        default=Path("HEARTBEAT.md"),
+        validation_alias="HEARTBEAT_FILE"
+    )
+    cron_file: Path = Field(
+        default=Path("CRON.json"),
+        validation_alias="CRON_FILE"
+    )
 
     class Config:
         env_file = ".env"
